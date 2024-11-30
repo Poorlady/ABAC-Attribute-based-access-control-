@@ -1,154 +1,153 @@
-type Roles = 'user' | 'admin' | 'moderator';
+// Try to emulate bank organization
+// there are 3 roles manager, banker, and auditor
+// there are 3 dept which are finance, credit, and marketing
+// there are 3 source of resource which are report, cheque, credit
+// attribute file is clearence, geo, and is_manager
+// manager on credit can view, reject, and accept loan
+// banker on credit can create and view loan
+// auditor on each dept can view the resources
+// manager on finance can view, reject, accept cheque,
+// banker on finance can accept, view, reject, and raise cheque
+// manager in marketing can accept, reject, and view plan
+// banker in marketing can view, create, plan
 
-type ResourceRoles = 'owner' | 'editor' | 'viewer';
-
-type Permission = 'view' | 'create' | 'delete' | 'edit';
-
-type OrgPermission = 'assign' | 'delete' | 'modify' | 'add' | 'kick' | 'view';
+type Roles = 'manager' | 'banker' | 'auditor';
+type Depts = 'finance' | 'credit' | 'marketing';
+type Clearence = 'low' | 'medium' | 'high';
+type Geo = 'branch' | 'head-office' | 'remote';
+type AccStatus = 'active' | 'frozen' | 'closed';
+type PermissionList = 'view' | 'reject' | 'accept' | 'raise' | 'create';
+type AccType = 'checking' | 'loan';
 
 type User = {
   id: number;
   name: string;
-  blockedBy: number[];
+  is_manager: boolean;
+  roles: Roles[];
+  depts: Depts[];
+  cleareance: Clearence;
+  Location: Geo;
 };
 
-type Organizations = {
+type ResourcesTransactions = {
   id: number;
-  name: string;
-  members: number[];
+  account_type: AccType;
+  transaction_amount: number;
+  account_holder: string;
+  account_status: AccStatus;
+  sensitivity: Clearence;
+  dept: Depts;
 };
 
-type Post = {
+type PlanMarketing = {
   id: number;
   title: string;
   content: string;
-  userId: number;
+  budget: number;
 };
 
-type SpreadSheet = {
-  id: number;
-  title: string;
-  content: string;
-  userId: number;
-  isPrivate: boolean;
-  invitedUser: number[];
-};
-
-type FileType = {
-  id: number;
-  caption: string;
-  userId: number;
-  isPrivate: boolean;
-  invitedUser: number[];
-};
-
-type ResourcesPermission = {
-  file: {
-    dataType: FileType;
-    actions: Permission;
+type ResourceWithPermission = {
+  planMarketing: {
+    typeData: PlanMarketing;
+    actions: PermissionList;
   };
-  spreadSheet: {
-    dataType: SpreadSheet;
-    actions: Permission;
-  };
-  post: {
-    dataType: Post;
-    actions: Permission;
+  resourcesTransaction: {
+    typeData: ResourcesTransactions;
+    actions: PermissionList;
   };
 };
 
-type CheckOrgPermission =
+type CheckinPermission<Key extends keyof ResourceWithPermission> =
   | boolean
-  | ((user: User, org: Organizations) => boolean);
+  | ((user: User, data: ResourceWithPermission[Key]['typeData']) => boolean);
 
-type UserRolePermission = {
+type RolesWithPermissions = {
   [Role in Roles]: Partial<{
-    [Actions in OrgPermission]: CheckOrgPermission;
-  }>;
-};
-
-type CheckResourcePermission<Key extends keyof ResourcesPermission> =
-  | boolean
-  | ((user: User, data: ResourcesPermission[Key]['dataType']) => boolean);
-
-type ResourceRolePermission = {
-  [Role in ResourceRoles]: Partial<{
-    [Key in keyof ResourcesPermission]: Partial<{
-      [Actions in ResourcesPermission[Key]['actions']]: CheckResourcePermission<Key>;
+    [Key in keyof ResourceWithPermission]: Partial<{
+      [Actions in ResourceWithPermission[Key]['actions']]: CheckinPermission<Key>;
     }>;
   }>;
 };
 
-const ResoucersRolesPermissions = {
-  owner: {
-    spreadSheet: {
-      delete: true,
-      edit: true,
-      view: true,
-    },
-    file: {
-      delete: true,
-      edit: true,
-      view: true,
-    },
-    post: {
-      delete: true,
-      edit: true,
-      view: true,
-    },
-  },
-  editor: {
-    spreadSheet: {
-      edit: true,
-      view: true,
-    },
-    file: {
-      edit: true,
-      view: true,
-    },
-    post: {
-      edit: true,
-      view: true,
-    },
-  },
-  viewer: {
-    spreadSheet: {
-      view: (user, data) =>
-        data.isPrivate
-          ? data.invitedUser.findIndex((invited) => invited === user.id) !== -1
-          : true,
-    },
-    file: {
-      view: (user, data) =>
-        data.isPrivate
-          ? data.invitedUser.findIndex((invited) => invited === user.id) !== -1
-          : true,
-    },
-    post: {
-      view: (user, data) =>
-        user.blockedBy.findIndex((by) => data.userId === by) === -1,
-    },
-  },
-} as const satisfies ResourceRolePermission;
+function checkUserDept<Key extends keyof ResourceWithPermission>(
+  user: User,
+  data: ResourceWithPermission[Key]['typeData'],
+  dept: Depts
+) {
+  return user.depts.includes(dept);
+}
 
-const OrganizationsRolesPermission = {
-  admin: {
-    add: true,
-    delete: true,
-    assign: true,
-    modify: true,
-    kick: true,
-    view: true,
+function managerTransaction(
+  user: User,
+  data: ResourcesTransactions,
+  transaction_amount: number,
+  sensitivity: Clearence
+) {
+  if (
+    data.transaction_amount > transaction_amount &&
+    data.sensitivity !== sensitivity &&
+    user.Location !== 'remote'
+  )
+    return true;
+  else if (
+    data.transaction_amount < transaction_amount &&
+    data.sensitivity === sensitivity
+  )
+    return true;
+  else return false;
+}
+
+const Roles = {
+  auditor: {
+    resourcesTransaction: {
+      view: true,
+    },
   },
-  moderator: {
-    add: true,
-    kick: true,
-    assign: true,
-    modify: true,
-    view: true,
+  manager: {
+    planMarketing: {
+      view: (user, data) => checkUserDept(user, data, 'marketing'),
+      accept: (user, data) => checkUserDept(user, data, 'marketing'),
+      reject: (user, data) => checkUserDept(user, data, 'marketing'),
+    },
+    resourcesTransaction: {
+      view: (user, data) => managerTransaction(user, data, 5000, 'low'),
+      accept: (user, data) => managerTransaction(user, data, 5000, 'low'),
+      reject: (user, data) => managerTransaction(user, data, 5000, 'low'),
+      create: (user, data) =>
+        data.account_type === 'loan' &&
+        data.transaction_amount > 5000 &&
+        user.depts.includes('credit'),
+    },
   },
-  user: {
-    view: (user, org) =>
-      org.members.findIndex((member) => member === user.id) !== -1,
+  banker: {
+    planMarketing: {
+      create: (user, data) => checkUserDept(user, data, 'marketing'),
+      view: (user, data) => checkUserDept(user, data, 'marketing'),
+    },
+    resourcesTransaction: {
+      view: (user, data) => data.sensitivity === 'low',
+      raise: (user, data) =>
+        data.account_type === 'checking' &&
+        user.depts.includes('finance') &&
+        user.depts.includes('credit') &&
+        data.transaction_amount > 5000 &&
+        user.Location !== 'remote',
+      reject: (user, data) =>
+        data.account_type === 'checking' &&
+        user.Location !== 'remote' &&
+        user.depts.includes('finance'),
+      accept: (user, data) =>
+        data.account_type === 'checking' &&
+        data.transaction_amount < 5000 &&
+        data.sensitivity === 'low' &&
+        user.Location !== 'remote' &&
+        user.depts.includes('finance'),
+      create: (user, data) =>
+        data.account_type === 'loan' &&
+        data.account_status === 'active' &&
+        data.transaction_amount < 5000 &&
+        user.Location !== 'remote' &&
+        user.depts.includes('credit'),
+    },
   },
-} as const satisfies UserRolePermission;
+} as const satisfies RolesWithPermissions;
