@@ -1,4 +1,5 @@
 import TaskPage from "./components/task-page"
+import  './data/data-emulate'
 
 export default function Home() {
   return (

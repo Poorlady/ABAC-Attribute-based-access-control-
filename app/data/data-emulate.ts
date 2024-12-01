@@ -151,3 +151,40 @@ const Roles = {
     },
   },
 } as const satisfies RolesWithPermissions;
+
+export function hasPermission<Key extends keyof ResourceWithPermission>(
+  user: User,
+  resource: Key,
+  action: ResourceWithPermission[Key]['actions'],
+  data?: ResourceWithPermission[Key]['typeData']
+) {
+  return user.roles.some((userRole) => {
+    const permission = (Roles as RolesWithPermissions)[userRole][resource]?.[
+      action
+    ];
+
+    if (permission === undefined) return false;
+    if (typeof permission === 'boolean') return permission;
+    if (typeof permission === 'function')
+      return data !== undefined && permission(user, data);
+  });
+}
+
+const userA: User = {
+  cleareance: 'medium',
+  depts: ['marketing'],
+  id: 1,
+  is_manager: true,
+  Location: 'branch',
+  name: 'Mid Manager of credit depts in branch office',
+  roles: ['manager'],
+};
+
+const planMarketingA: PlanMarketing = {
+  budget: 4000,
+  content: 'This is marketing plan for some advertising in bank A',
+  id: 1,
+  title: 'Black Friday Sales',
+};
+
+console.log(hasPermission(userA, 'planMarketing', 'view', planMarketingA));
